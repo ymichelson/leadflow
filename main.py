@@ -21,6 +21,8 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
+import config  # noqa: F401  loads .env - MUST come before the imports below,
+#                             which read os.environ while they are importing
 import business_hours
 import crm
 import reps

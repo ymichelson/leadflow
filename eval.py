@@ -19,6 +19,7 @@ Run:
 import argparse
 import sys
 
+import config  # noqa: F401  loads .env before anything reads the API key
 from classify import classify_inquiry
 # Imported, not re-declared: the eval has to judge against the same threshold
 # production uses. Tune CONFIDENCE_THRESHOLD and this report moves with it.
