@@ -45,7 +45,7 @@
 - השדות `leadflow_category`, `leadflow_urgency` ו-`leadflow_needs_review`
   נוצרו ואומתו בחשבון האמיתי.
 - יש בחשבון אנשי קשר שקיבלו ערך בשדה הזה.
-- 56 בדיקות אוטומטיות מכסות את הזרימה: intake עמיד, idempotency, restart,
+- בדיקות אוטומטיות מכסות את הזרימה: intake עמיד, idempotency, restart,
   ליד חדש, לקוח קיים, כשל CRM ו-retry.
 - זרימת website-to-CRM אומתה מקצה לקצה על contact סינתטי מסומן: Gemini החזיר
   `new_lead` בביטחון 95, HubSpot עדכן את אותו contact במקום ליצור כפילות,
@@ -68,7 +68,8 @@
 
 ### קיים בקוד אך לא אומת מקצה לקצה בסביבה הנוכחית
 - WhatsApp: קיים webhook בפורמט Meta ואימות חתימה, אבל אין כרגע App Secret,
-  token ומספר עסקי שמוכיחים תנועה אמיתית. ה-adapter כבר שומר הודעה לפני 200
+  token ומספר עסקי שמוכיחים תנועה אמיתית. בלי `APP_SECRET` ה-endpoint דוחה
+  בקשות, כדי שדמו ציבורי לא יקבל webhook מזויף. ה-adapter שומר הודעה לפני 200
   ומשתמש ב-message ID למניעת כפילות, אבל ללא Meta אמיתי הוא עדיין ניסיוני.
 
 ### לא נבנה
@@ -111,7 +112,7 @@
 ## הרצה
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env

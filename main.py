@@ -70,7 +70,7 @@ PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>צור קשר</title>
+<title>LeadFlow · צור קשר</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600&family=Rubik:wght@400;500&display=swap">
@@ -111,6 +111,7 @@ PAGE = """<!DOCTYPE html>
   .full{grid-column:1/-1}
   label{display:block;font-size:13px;font-weight:600;margin-bottom:7px}
   .optional{font-weight:400;color:var(--ink3)}
+  .contact-note{margin:-2px 0 0;color:var(--ink2);font-size:13px}
   input,textarea{width:100%;background:var(--sunk);border:1px solid transparent;
     border-radius:12px;padding:13px 15px;color:var(--ink);
     font:400 16px/1.5 var(--body);transition:background .15s,border-color .15s}
@@ -189,27 +190,28 @@ PAGE = """<!DOCTYPE html>
   </header>
 
   <div class="duo">
-    <section class="panel">
+    <form class="panel" id="inquiry-form">
       <div class="fields">
         <div><label for="name">שם מלא</label>
           <input id="name" type="text" autocomplete="name" placeholder="ישראל ישראלי"></div>
-        <div><label for="phone">טלפון <span class="optional">(טלפון או אימייל)</span></label>
+        <div><label for="phone">טלפון</label>
           <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="050-1234567"></div>
-        <div class="full"><label for="email">אימייל <span class="optional">(אימייל או טלפון)</span></label>
+        <div class="full"><label for="email">אימייל</label>
           <input id="email" type="email" inputmode="email" autocomplete="email" placeholder="israel@example.com"></div>
+        <p class="contact-note full">יש למלא לפחות טלפון או אימייל כדי שנוכל לחזור אליכם.</p>
         <div class="full"><label for="text">במה נוכל לעזור?</label>
-          <textarea id="text" placeholder="היי, אשמח להצעת מחיר…"></textarea></div>
+          <textarea id="text" required aria-required="true" placeholder="היי, אשמח להצעת מחיר…"></textarea></div>
       </div>
-      <button type="button" class="cta" id="cta" onclick="send()">
+      <button type="submit" class="cta" id="cta">
         <span id="ctatext">שליחת פנייה</span>
         <span class="arrow" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 17 7 7"/><path d="M17 7H7v10"/></svg></span>
       </button>
       <div class="ok" id="ok" role="status" aria-live="polite"></div>
-    </section>
+    </form>
 
     <aside class="promo">
       <div>
-        <span class="pill">ההתחייבות שלנו</span>
+        <span class="pill">יעד זמן למענה</span>
         <span class="promo-num lat" id="promonum">4</span>
         <span class="promo-unit">שעות עבודה</span>
         <p class="promo-note">זה הזמן שבתוכו אנחנו שואפים לחזור לכל פנייה. חריגות מזוהות ומוצגות בתצוגת המערכת.</p>
@@ -279,19 +281,25 @@ async function send() {
       headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
     const d = await r.json();
     if (!r.ok) {
-      say('bad', 'הפנייה לא נשלחה: ' + esc(d.error || r.status));
+      say('bad', r.status === 400
+        ? 'בדקו שמילאתם פנייה וטלפון או אימייל תקינים.'
+        : 'לא הצלחנו לשמור את הפנייה כרגע. נסו שוב בעוד רגע.');
     } else {
       say('good', 'קיבלנו את הפנייה ושמרנו אותה במערכת. נחזור אליכם בהקדם, תודה!');
       textEl.value = '';
       activeSubmissionId = null;
     }
   } catch (e) {
-    say('bad', 'שגיאה בשליחה: ' + esc(e));
+    say('bad', 'לא הצלחנו להתחבר כרגע. בדקו את החיבור ונסו שוב.');
   } finally {
     cta.disabled = false;
     ctaText.textContent = 'שליחת פנייה';
   }
 }
+document.getElementById('inquiry-form').addEventListener('submit', event => {
+  event.preventDefault();
+  send();
+});
 
 // /status reports working hours the way the server means them
 // ("sun,mon,tue,wed,thu 09:00-18:00 Asia/Jerusalem"). That is the right form
@@ -497,13 +505,13 @@ OPS_PAGE = """<!DOCTYPE html>
   <div class="disclosure">
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.6v.5"/></svg>
     <div><b>העמוד הזה הוא חלון לדמו, לא מסך מוצר.</b>
-    בפועל אנשי המכירות עובדים בתוך ה‑CRM ולא נכנסים לשום מסך נוסף, והמנכ״ל מקבל דוח.
+    בפועל אנשי המכירות עובדים בתוך ה‑CRM ולא נכנסים לשום מסך נוסף. בדמו המידע מוצג כאן; בגרסת היעד המנכ״ל יקבל דוח.
     הוא קיים כאן רק כדי שאפשר יהיה לראות מה המערכת עשתה עם כל פנייה.</div>
   </div>
 
   <header class="hero">
     <h1>מה קורה<br>לכל פנייה<span class="q">?</span></h1>
-    <p>פניות מהאתר נשמרות לפני העיבוד, מסווגות אוטומטית ונכתבות ל‑CRM עם שיוך לפי סבב. מתאם WhatsApp קיים בקוד, אך החיבור ל‑Meta עדיין לא אומת בסביבה חיה.</p>
+    <p>פניות מהאתר נשמרות לפני העיבוד, מסווגות אוטומטית ונכתבות ל‑CRM עם המלצת שיוך לפי סבב. מתאם WhatsApp קיים בקוד, אך החיבור ל‑Meta עדיין לא אומת בסביבה חיה.</p>
   </header>
 
   <div class="alerts" id="alerts"></div>
@@ -511,7 +519,7 @@ OPS_PAGE = """<!DOCTYPE html>
   <section class="ledger" aria-labelledby="big-lab">
     <div class="ledger-top">
       <div>
-        <p class="lab" id="big-lab">לידים שממתינים למענה</p>
+        <p class="lab" id="big-lab">לידים מעל יעד הזמן (מדד דמו)</p>
         <span class="big" id="breachnum">—</span>
       </div>
       <p class="ledger-note" id="ledgernote"></p>
@@ -562,6 +570,10 @@ function paint(id, data, html) {
 
 function alertsHtml(d) {
   const out = [];
+  if (!d.sla_check || d.sla_check.ok !== true) out.push(['warn', 'בדיקת SLA',
+    d.sla_check && d.sla_check.ok === false
+      ? 'לא ניתן לבדוק כרגע את HubSpot; הנתון האחרון אינו מוצג כהצלחה.'
+      : 'הבדיקה הראשונה מול HubSpot עדיין לא הושלמה.']);
   if (d.silence_alert && d.silence_alert.active) out.push(['warn', 'התראת דממה',
     'לא נכנסו פניות כבר מעל ' + esc(d.silence_hours) + ' שעות עבודה. ייתכן שהטופס או הוובהוק שבורים.']);
   if (d.sla_breach_count) out.push(['bad', 'חריגה מיעד התגובה',
@@ -585,9 +597,11 @@ function alertsHtml(d) {
 }
 
 function repsHtml(d) {
+  if (!d.sla_check || d.sla_check.ok !== true) return '<p class="clear-note">' +
+    'אין כרגע תוצאה אמינה לבדיקת ה‑SLA. המערכת תנסה שוב אוטומטית.</p>';
   if (!d.sla_breaches.length) return '<p class="clear-note">' +
-    'כל הפניות קיבלו מענה בתוך יעד הזמן. אין ליד שממתין מעל ' +
-    esc(d.sla_hours) + ' שעות עבודה.</p>';
+    'לא זוהו אנשי קשר בסטטוס NEW שעברו את סף ' +
+    esc(d.sla_hours) + ' שעות העבודה. זהו proxy בדמו, לא הוכחה שנשלחה תגובה.</p>';
 
   let worst = 0;
   d.sla_breaches.forEach(g => g.leads.forEach(l => {
@@ -670,7 +684,7 @@ async function refresh() {
     const r = await fetch('/status');
     const d = await r.json();
 
-    paint('alerts', [d.silence_alert.active, d.silence_hours, d.sla_breach_count,
+    paint('alerts', [d.sla_check, d.silence_alert.active, d.silence_hours, d.sla_breach_count,
                      d.sla_hours, d.retry_queue, d.dead_letter,
                      d.intake_pending, d.intake_dead], () => alertsHtml(d));
 
@@ -678,8 +692,8 @@ async function refresh() {
     num.textContent = d.sla_breach_count;
     num.classList.toggle('clear', !d.sla_breach_count);
     document.getElementById('ledgernote').textContent =
-      'ליד נחשב בחריגה אחרי ' + d.sla_hours +
-      ' שעות עבודה בלי מענה. סופרים שעות עבודה בלבד, לא סופי שבוע.';
+      'בדמו, contact שנשאר NEW אחרי ' + d.sla_hours +
+      ' שעות עבודה מסומן לבדיקה. זהו proxy לתגובה, לא אירוע מענה אמיתי.';
 
     paint('byrep', [d.sla_breaches, d.sla_hours], () => repsHtml(d));
     paint('repsline', [d.reps, d.rotation_next, d.business_hours, d.sla_hours],
@@ -706,8 +720,8 @@ async def ops() -> str:
     """A window into the running system, for the demo only.
 
     Deliberately a separate URL: the sales team works inside the CRM and the
-    owner gets a report. This page exists so a human can watch what the
-    pipeline decided, not because the product ships a dashboard.
+    target product sends the owner a report. This page exists so a human can
+    watch what the pipeline decided, not because the prototype sends one.
     """
     return OPS_PAGE
 
@@ -716,7 +730,12 @@ async def ops() -> str:
 
 @app.post("/api/inquiry")
 async def api_inquiry(request: Request) -> JSONResponse:
-    data = await request.json()
+    try:
+        data = await request.json()
+    except Exception:  # noqa: BLE001 - invalid client JSON is a 400, not a crash
+        return JSONResponse({"error": "invalid JSON"}, status_code=400)
+    if not isinstance(data, dict):
+        return JSONResponse({"error": "JSON object required"}, status_code=400)
     text = (data.get("text") or "").strip()
     if not text:
         return JSONResponse({"error": "empty inquiry"}, status_code=400)
@@ -761,7 +780,10 @@ async def inquiry_status(submission_id: str) -> JSONResponse:
 async def whatsapp_verify(request: Request) -> PlainTextResponse:
     """Meta's one-time verification handshake."""
     params = request.query_params
-    if params.get("hub.verify_token") == os.environ.get("WHATSAPP_VERIFY_TOKEN", "leadflow"):
+    verify_token = os.environ.get("WHATSAPP_VERIFY_TOKEN")
+    if not verify_token:
+        return PlainTextResponse("webhook not configured", status_code=503)
+    if params.get("hub.verify_token") == verify_token:
         return PlainTextResponse(params.get("hub.challenge", ""))
     return PlainTextResponse("verification failed", status_code=403)
 
@@ -773,14 +795,13 @@ def verify_meta_signature(raw_body: bytes, header: str | None) -> bool:
     produce different bytes (key order, spacing) and every signature would
     fail, so this must never be handed a re-encoded payload.
 
-    No APP_SECRET set -> accept, so local testing and the demo still work.
-    That is a deliberate hole with a loud warning, not an oversight.
+    No APP_SECRET set -> reject. The website demo does not need this endpoint,
+    and an unconfigured public webhook must not create contacts or AI costs.
     """
     secret = os.environ.get("APP_SECRET")
     if not secret:
-        log.warning("APP_SECRET not set - accepting webhook WITHOUT signature "
-                    "verification (fine locally, not fine in production)")
-        return True
+        log.warning("APP_SECRET not set - WhatsApp webhook is disabled")
+        return False
     if not header or not header.startswith("sha256="):
         return False
     expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
@@ -852,6 +873,7 @@ async def status() -> dict:
         # Grouped by rep: [{"rep", "count", "leads": [{"name", "hours_overdue"}]}]
         "sla_breaches": sla.current_breaches,
         "sla_breach_count": crm.breach_total(sla.current_breaches),
+        "sla_check": sla.sla_check,
         "sla_hours": sla.SLA_HOURS,
         # Stated explicitly: "4 hours" means four WORKING hours, and here is
         # the definition being used. The owner should never have to guess.

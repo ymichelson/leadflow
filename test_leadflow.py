@@ -5,6 +5,7 @@ Run: pytest test_leadflow.py
 
 import asyncio
 import json
+import sqlite3
 import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -367,6 +368,29 @@ def test_failed_first_write_is_queued_with_the_full_payload():
     enqueue_mock.assert_called_once_with(inquiry, verdict, False, "down")
 
 
+def test_failed_queue_write_propagates_so_durable_intake_is_retained():
+    inquiry = {"source": "טופס אתר", "text": "חשוב"}
+    verdict = {"category": "new_lead", "urgency": "high", "confidence": 88}
+    with patch("crm._write_once", new=AsyncMock(side_effect=RuntimeError("crm down"))), \
+         patch("crm.enqueue", side_effect=sqlite3.OperationalError("disk full")):
+        try:
+            asyncio.run(crm.write_lead(inquiry, verdict, False))
+        except sqlite3.OperationalError as exc:
+            assert "disk full" in str(exc)
+        else:
+            raise AssertionError("queue persistence failure must reach the durable worker")
+
+
+def test_enqueue_itself_does_not_swallow_storage_failure():
+    with patch("crm._db", side_effect=sqlite3.OperationalError("disk full")):
+        try:
+            crm.enqueue({"text": "private"}, {}, False)
+        except sqlite3.OperationalError:
+            pass
+        else:
+            raise AssertionError("enqueue must report that it did not persist")
+
+
 def test_retry_reuses_the_same_write_path_in_delayed_mode():
     inquiry = {"source": "טופס אתר", "text": "חשוב"}
     verdict = {"category": "new_lead", "urgency": "high", "confidence": 88}
@@ -456,6 +480,14 @@ def test_dst_is_handled_not_hardcoded():
     assert _il(2026, 1, 16, 12).utcoffset().total_seconds() == 2 * 3600
 
 
+def test_crm_sla_wrapper_parses_hubspot_timestamp():
+    with patch("crm.business_hours.business_hours_between", return_value=3.5) as clock:
+        assert crm._business_hours_since("2026-08-16T09:00:00Z") == 3.5
+    created, current = clock.call_args.args
+    assert created.tzinfo is not None
+    assert current.tzinfo is not None
+
+
 # ---- webhook signature: the door to the whole system ----
 
 import hashlib
@@ -492,10 +524,16 @@ def test_signature_rejects_missing_or_malformed_header():
         assert main.verify_meta_signature(BODY, "") is False
         assert main.verify_meta_signature(BODY, "md5=abc") is False
 
-def test_signature_accepts_when_no_app_secret_configured():
-    # Documented escape hatch so local testing works. Logs a warning.
+def test_signature_rejects_when_no_app_secret_configured():
+    # A public demo must not expose a cost/CRM-write endpoint by accident.
     with patch.dict(os.environ, {"APP_SECRET": ""}):
-        assert main.verify_meta_signature(BODY, None) is True
+        assert main.verify_meta_signature(BODY, None) is False
+
+
+def test_api_rejects_non_object_json_as_a_client_error():
+    request = SimpleNamespace(json=AsyncMock(return_value=[]))
+    response = asyncio.run(main.api_inquiry(request))
+    assert response.status_code == 400
 
 
 # ---- retry queue survives a restart ----

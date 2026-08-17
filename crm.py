@@ -259,6 +259,11 @@ def _business_hours_since(created_raw: str) -> float | None:
     """
     if not created_raw:
         return None
+    try:
+        created = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
+        return business_hours.business_hours_between(created, datetime.now(UTC))
+    except Exception:  # noqa: BLE001 - an unparseable date must not kill the report
+        return None
 
 
 def _lead_display_name(contact: dict, properties: dict) -> str:
@@ -274,11 +279,6 @@ def _lead_display_name(contact: dict, properties: dict) -> str:
         )
     suffix = str(contact.get("id", ""))[-4:] or "----"
     return f"ליד …{suffix}"
-    try:
-        created = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
-        return business_hours.business_hours_between(created, datetime.now(UTC))
-    except Exception:  # noqa: BLE001 - an unparseable date must not kill the report
-        return None
 
 
 async def find_overdue_leads(sla_hours: float) -> list[dict]:
@@ -402,7 +402,7 @@ def _db() -> sqlite3.Connection:
 
 
 def enqueue(inquiry: dict, verdict: dict, needs_review: bool, error: str = "") -> None:
-    """Park a failed write. Never raises - if this failed we'd lose the lead."""
+    """Park a failed write, or raise so the durable inbox keeps its copy."""
     try:
         with _db() as conn:
             conn.execute(
@@ -412,11 +412,11 @@ def enqueue(inquiry: dict, verdict: dict, needs_review: bool, error: str = "") -
                  json.dumps(verdict, ensure_ascii=False),
                  int(needs_review), datetime.now(UTC).isoformat(), time.time(), error),
             )
-    except Exception as e:  # noqa: BLE001
-        # Absolute last resort: the inquiry goes to the log in full so a human
-        # can replay it by hand. Ugly, but still not silently dropped.
-        log.error("QUEUE WRITE FAILED - INQUIRY AT RISK, replay by hand: %s | %s",
-                  e, json.dumps(inquiry, ensure_ascii=False))
+    except Exception:  # noqa: BLE001
+        # Do not log the inquiry itself: it contains customer PII. Propagating
+        # keeps the original durable-inbox row intact for another attempt.
+        log.exception("retry queue persistence failed; durable intake retained")
+        raise
 
 
 def queue_size() -> int:

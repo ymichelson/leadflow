@@ -27,6 +27,7 @@ CHECK_EVERY_SECONDS = int(os.environ.get("CHECK_EVERY_SECONDS", "900"))  # 15 mi
 
 # Exposed to the demo page. One entry per rep: {"rep", "count", "leads"}.
 current_breaches: list[dict] = []
+sla_check: dict = {"ok": None, "checked_at": None}
 silence_alert: dict = {"active": False, "since": None}
 
 
@@ -36,6 +37,8 @@ async def sla_loop() -> None:
             breaches = await find_overdue_leads(SLA_HOURS)
             current_breaches.clear()
             current_breaches.extend(breaches)
+            sla_check["ok"] = True
+            sla_check["checked_at"] = datetime.now(UTC).isoformat()
             if breaches:
                 # Name the rep in the log line - that is the whole point of
                 # the report: which salesperson is not getting back to people.
@@ -46,6 +49,7 @@ async def sla_loop() -> None:
             # CRM down? Fine. We simply catch the breaches on the next cycle.
             # A late SLA alert is acceptable; a dead checker is not.
             log.warning("SLA check skipped (CRM unreachable?): %s", e)
+            sla_check["ok"] = False
         await asyncio.sleep(CHECK_EVERY_SECONDS)
 
 

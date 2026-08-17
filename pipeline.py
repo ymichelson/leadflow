@@ -4,6 +4,7 @@ Flow: normalize -> classify (AI reads) -> route by confidence (code decides)
 -> dedupe -> write to CRM. Every branch ends in the CRM; nothing is dropped.
 """
 
+import asyncio
 import logging
 import os
 from datetime import datetime, UTC
@@ -41,7 +42,9 @@ async def handle_inquiry(source: str, text: str, phone: str | None = None,
         "submission_id": submission_id,
     }
 
-    verdict = classify_inquiry(inquiry["text"])
+    # Provider calls are synchronous. Keep them off the event loop so a slow
+    # model cannot freeze /health or prevent new inquiries being persisted.
+    verdict = await asyncio.to_thread(classify_inquiry, inquiry["text"])
 
     # The code decides: low confidence means the AI does not get to decide.
     needs_review = verdict["confidence"] < CONFIDENCE_THRESHOLD
