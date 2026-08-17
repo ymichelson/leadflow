@@ -1,5 +1,8 @@
 # LeadFlow
 
+**דמו חי:** [טופס יצירת קשר](https://web-production-b50b3.up.railway.app/) ·
+[תצוגת מערכת](https://web-production-b50b3.up.railway.app/ops)
+
 שלב ב' של פרויקט הבית: פרוסה אנכית שמקבלת פנייה מטופס אתר, מסווגת אותה,
 מונעת כפילות, כותבת אותה ל-HubSpot ושומרת אותה לניסיון חוזר אם ה-CRM אינו זמין.
 
@@ -192,6 +195,9 @@ production מרובה replicas צריך Postgres או queue מנוהל.
 
 `railway.json` מגדיר Railpack, פקודת start, בדיקת `/health` ו-restart במקרה
 של קריסה. כדי שה-durable intake יהיה באמת עמיד גם לאחר deploy או restart:
+
+הדמו הנוכחי פרוס כ-service יחיד ב-Railway, עם volume שמחובר ל-`/data`
+ו-`STATE_DB=/data/leadflow_queue.db`.
 
 1. מחברים את ה-repository ל-Railway כשירות יחיד ועם replica יחיד.
 2. מצרפים volume ומגדירים לו mount path של `/data`.
