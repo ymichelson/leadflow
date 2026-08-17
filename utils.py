@@ -24,6 +24,14 @@ def normalize_phone(raw: str | None) -> str | None:
     return f"+972{digits}"
 
 
+def valid_email(raw: str | None) -> bool:
+    """Apply a deliberately small email sanity check, not full RFC validation."""
+    if not raw:
+        return False
+    value = raw.strip()
+    return bool(re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value))
+
+
 def clean_text(raw: str | None, limit: int = 4000) -> str:
     """Trim and cap free text before sending it anywhere."""
     if not raw:

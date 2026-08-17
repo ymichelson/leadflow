@@ -24,14 +24,53 @@ log = logging.getLogger("leadflow")
 BASE = "https://api.hubapi.com"
 NOTE_TO_CONTACT_ASSOCIATION = 202  # HubSpot-defined association type id
 
-# Custom contact property holding the assigned salesperson. The CRM stays the
-# single source of truth for ownership - we never keep a local copy of it.
+# Custom contact properties used by the slice. They make the AI decision and
+# the review state queryable inside HubSpot instead of burying them only in a
+# note. The rep field demonstrates the assignment policy; it is not HubSpot's
+# native owner field (see README).
 REP_PROPERTY = "leadflow_assigned_rep"
+CATEGORY_PROPERTY = "leadflow_category"
+URGENCY_PROPERTY = "leadflow_urgency"
+REVIEW_PROPERTY = "leadflow_needs_review"
 UNASSIGNED_LABEL = "ללא נציג"
 
-# Flips to True once the property is known to exist. Guarded, because a
-# contact create that references a missing property is rejected by HubSpot.
-_rep_property_ready: dict = {"ok": False}
+PROPERTY_DEFINITIONS = {
+    REP_PROPERTY: {
+        "label": "נציג מטפל (LeadFlow)",
+        "type": "string",
+        "fieldType": "text",
+        "description": "הנציג שאליו שויך הליד אוטומטית בקליטה",
+    },
+    CATEGORY_PROPERTY: {
+        "label": "סיווג אחרון (LeadFlow)",
+        "type": "string",
+        "fieldType": "text",
+        "description": "סיווג הפנייה האחרונה על ידי LeadFlow",
+    },
+    URGENCY_PROPERTY: {
+        "label": "דחיפות אחרונה (LeadFlow)",
+        "type": "string",
+        "fieldType": "text",
+        "description": "דחיפות הפנייה האחרונה על ידי LeadFlow",
+    },
+    REVIEW_PROPERTY: {
+        "label": "דורש בדיקת אדם (LeadFlow)",
+        "type": "bool",
+        "fieldType": "booleancheckbox",
+        "description": "האם הפנייה האחרונה דורשת בדיקה אנושית",
+        # HubSpot's property API requires both boolean options explicitly even
+        # though the values themselves are fixed.
+        "options": [
+            {"label": "כן", "value": "true", "displayOrder": 0, "hidden": False},
+            {"label": "לא", "value": "false", "displayOrder": 1, "hidden": False},
+        ],
+    },
+}
+
+# A HubSpot create/update is rejected when it references a property that does
+# not exist. Readiness is tracked per property because schema creation can
+# partially succeed during an outage.
+_property_ready: dict[str, bool] = {name: False for name in PROPERTY_DEFINITIONS}
 
 
 def _headers() -> dict:
@@ -46,33 +85,36 @@ def _headers() -> dict:
 # unreachable at startup the service must still come up and keep accepting
 # inquiries. A degraded feature is acceptable; a refused intake is not.
 
+async def ensure_leadflow_properties(names: list[str] | None = None) -> bool:
+    """Create the custom contact properties used by the slice.
+
+    This is safe to call repeatedly. HubSpot returns 409 when a property already
+    exists, which is the expected result after the first successful startup.
+    """
+    wanted = names or list(PROPERTY_DEFINITIONS)
+    for name in wanted:
+        if _property_ready.get(name):
+            continue
+        definition = PROPERTY_DEFINITIONS[name]
+        payload = {"name": name, "groupName": "contactinformation", **definition}
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                r = await client.post(
+                    f"{BASE}/crm/v3/properties/contacts",
+                    headers=_headers(), json=payload,
+                )
+            if r.status_code != 409:
+                r.raise_for_status()
+            _property_ready[name] = True
+            log.info("contact property '%s' is ready", name)
+        except Exception as e:  # noqa: BLE001 - never block startup on the CRM
+            log.warning("could not ensure contact property '%s': %s", name, e)
+    return all(_property_ready.get(name, False) for name in wanted)
+
+
 async def ensure_rep_property() -> bool:
-    """Create the assigned-rep contact property if it isn't there yet."""
-    if _rep_property_ready["ok"]:
-        return True
-    payload = {
-        "name": REP_PROPERTY,
-        "label": "נציג מטפל (LeadFlow)",
-        "type": "string",
-        "fieldType": "text",
-        "groupName": "contactinformation",
-        "description": "הנציג שאליו שויך הליד אוטומטית בקליטה",
-    }
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(f"{BASE}/crm/v3/properties/contacts",
-                                  headers=_headers(), json=payload)
-        if r.status_code == 409:  # already exists - the normal case after day 1
-            _rep_property_ready["ok"] = True
-            log.info("rep property '%s' already exists", REP_PROPERTY)
-            return True
-        r.raise_for_status()
-        _rep_property_ready["ok"] = True
-        log.info("rep property '%s' created", REP_PROPERTY)
-        return True
-    except Exception as e:  # noqa: BLE001 - never block startup on the CRM
-        log.warning("could not ensure rep property (will retry on first write): %s", e)
-        return False
+    """Backward-compatible helper used by older callers and tests."""
+    return await ensure_leadflow_properties([REP_PROPERTY])
 
 
 async def seed_rotation_from_crm() -> None:
@@ -129,26 +171,65 @@ async def find_contact(phone: str | None, email: str | None) -> str | None:
         return results[0]["id"] if results else None
 
 
-async def create_contact(phone: str | None, email: str | None, name: str | None,
-                         needs_review: bool, rep: str | None = None) -> str:
+def _leadflow_metadata(verdict: dict, needs_review: bool,
+                       rep: str | None = None) -> dict:
+    """Properties that make the latest routing decision visible in HubSpot."""
+    values = {
+        CATEGORY_PROPERTY: verdict.get("category", "other"),
+        URGENCY_PROPERTY: verdict.get("urgency", "normal"),
+        REVIEW_PROPERTY: "true" if needs_review else "false",
+    }
+    if rep:
+        values[REP_PROPERTY] = rep
+    return {name: value for name, value in values.items()
+            if _property_ready.get(name)}
+
+
+def _contact_properties(phone: str | None, email: str | None, name: str | None,
+                        verdict: dict, needs_review: bool,
+                        rep: str | None = None) -> dict:
+    """Build a contact payload without doing I/O, so the business rules test cleanly."""
+    category = verdict.get("category", "other")
     props = {
         "phone": phone or "",
         "email": email or "",
         "lifecyclestage": "lead",
-        "hs_lead_status": "ATTEMPTED_TO_CONTACT" if needs_review else "NEW",
+        # Human review is not an attempted customer contact. Confident spam is
+        # retained, as promised in Part A, but excluded from the active sales SLA.
+        "hs_lead_status": "UNQUALIFIED" if category == "spam" and not needs_review else "NEW",
     }
-    if rep and _rep_property_ready["ok"]:
-        props[REP_PROPERTY] = rep
+    props.update(_leadflow_metadata(verdict, needs_review, rep))
     if name:
         parts = name.split(" ", 1)
         props["firstname"] = parts[0]
         if len(parts) > 1:
             props["lastname"] = parts[1]
+    return props
+
+
+async def create_contact(phone: str | None, email: str | None, name: str | None,
+                         verdict: dict, needs_review: bool,
+                         rep: str | None = None) -> str:
+    props = _contact_properties(phone, email, name, verdict, needs_review, rep)
     async with httpx.AsyncClient(timeout=15) as client:
         r = await client.post(f"{BASE}/crm/v3/objects/contacts",
                               headers=_headers(), json={"properties": props})
         r.raise_for_status()
         return r.json()["id"]
+
+
+async def update_contact_metadata(contact_id: str, verdict: dict,
+                                  needs_review: bool) -> None:
+    """Expose the latest classification/review state on an existing contact."""
+    props = _leadflow_metadata(verdict, needs_review)
+    if not props:
+        return
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.patch(
+            f"{BASE}/crm/v3/objects/contacts/{contact_id}",
+            headers=_headers(), json={"properties": props},
+        )
+        r.raise_for_status()
 
 
 async def add_note(contact_id: str, body: str) -> None:
@@ -178,6 +259,21 @@ def _business_hours_since(created_raw: str) -> float | None:
     """
     if not created_raw:
         return None
+
+
+def _lead_display_name(contact: dict, properties: dict) -> str:
+    """Return a safe label for the public demo status payload.
+
+    Real names can be enabled deliberately for a private local demo, but the
+    default must not publish customer PII from an unauthenticated JSON endpoint.
+    """
+    if os.environ.get("EXPOSE_DEMO_PII", "").lower() in {"1", "true", "yes"}:
+        return (
+            f"{properties.get('firstname') or ''} {properties.get('lastname') or ''}"
+            .strip() or "ללא שם"
+        )
+    suffix = str(contact.get("id", ""))[-4:] or "----"
+    return f"ליד …{suffix}"
     try:
         created = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
         return business_hours.business_hours_between(created, datetime.now(UTC))
@@ -240,10 +336,9 @@ async def find_overdue_leads(sla_hours: float) -> list[dict]:
         # not the kind to hide.
         rep = (p.get(REP_PROPERTY) or "").strip() or UNASSIGNED_LABEL
         by_rep.setdefault(rep, []).append({
-            "id": c["id"],
-            "name": f"{p.get('firstname') or ''} {p.get('lastname') or ''}".strip() or "ללא שם",
-            "phone": p.get("phone") or "",
-            "created": p.get("createdate") or "",
+            # /status is intentionally PII-safe by default. The CRM remains the
+            # place to inspect the actual contact and phone number.
+            "name": _lead_display_name(c, p),
             "hours_overdue": round(age - sla_hours, 1) if age is not None else None,
         })
 
@@ -285,7 +380,10 @@ def _db() -> sqlite3.Connection:
     temp file. CREATE TABLE IF NOT EXISTS is cheap and makes every entry point
     self-initialising - no ordering bug where a write beats the setup call.
     """
-    conn = sqlite3.connect(os.environ.get("RETRY_DB", "leadflow_queue.db"))
+    path = os.environ.get("STATE_DB") or os.environ.get(
+        "RETRY_DB", "leadflow_queue.db"
+    )
+    conn = sqlite3.connect(path)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS retry_queue (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -391,39 +489,68 @@ def _mark_dead(row_id: int, error: str) -> None:
               "dead-letter queue: %s", row_id, MAX_ATTEMPTS, error)
 
 
+def _build_note(inquiry: dict, verdict: dict, needs_review: bool,
+                created: bool, rep: str | None, delayed: bool = False) -> str:
+    """One note format for immediate and retried writes.
+
+    Previously the retry path discarded classification, urgency, summary and
+    review state after it finally succeeded. A delayed write must carry exactly
+    the same business information as a first-attempt write.
+    """
+    note_lines = []
+    if delayed:
+        note_lines.append("(נכתב באיחור אחרי תקלת CRM)")
+    note_lines.extend([
+        f"פנייה חדשה ({inquiry['source']})" if created
+        else f"פנייה נוספת מאותו לקוח ({inquiry['source']})",
+        f"סיווג: {verdict['category']} | דחיפות: {verdict['urgency']} | "
+        f"ביטחון: {verdict['confidence']}",
+    ])
+    if inquiry.get("submission_id"):
+        note_lines.append(f"מזהה קליטה: {inquiry['submission_id']}")
+    if rep:
+        note_lines.append(f"שויך לנציג: {rep}")
+    if needs_review:
+        note_lines.append("*** דורש בדיקת אדם - המערכת לא בטוחה בסיווג ***")
+    if verdict.get("summary"):
+        note_lines.append(f"תקציר: {verdict['summary']}")
+    note_lines.extend(["---", inquiry["text"]])
+    return "\n".join(note_lines)
+
+
+async def _write_once(inquiry: dict, verdict: dict, needs_review: bool,
+                      delayed: bool = False) -> dict:
+    """Perform one CRM write attempt. Never enqueues by itself."""
+    if not all(_property_ready.values()):
+        await ensure_leadflow_properties()
+
+    contact_id = await find_contact(inquiry.get("phone"), inquiry.get("email"))
+    created = False
+    rep = None
+    if not contact_id:
+        # A rep is picked only when a genuinely new contact is created. A
+        # returning customer keeps the assignment already stored in the CRM.
+        rep = reps.next_rep()
+        contact_id = await create_contact(
+            inquiry.get("phone"), inquiry.get("email"),
+            inquiry.get("name") or verdict.get("name"), verdict,
+            needs_review, rep,
+        )
+        created = True
+    else:
+        await update_contact_metadata(contact_id, verdict, needs_review)
+
+    await add_note(
+        contact_id,
+        _build_note(inquiry, verdict, needs_review, created, rep, delayed),
+    )
+    return {"ok": True, "contact_id": contact_id, "created": created, "rep": rep}
+
+
 async def write_lead(inquiry: dict, verdict: dict, needs_review: bool) -> dict:
     """Create/update the lead + note. On failure, enqueue for retry."""
     try:
-        contact_id = await find_contact(inquiry.get("phone"), inquiry.get("email"))
-        created = False
-        rep = None
-        if not contact_id:
-            # A rep is picked only when a genuinely new contact is created.
-            # A returning customer keeps the rep they already have - otherwise
-            # ownership would move every time they message and the "who isn't
-            # answering" report would blame the wrong person.
-            if not _rep_property_ready["ok"]:
-                await ensure_rep_property()
-            rep = reps.next_rep()
-            contact_id = await create_contact(
-                inquiry.get("phone"), inquiry.get("email"),
-                verdict.get("name"), needs_review, rep,
-            )
-            created = True
-        note_lines = [
-            f"פנייה חדשה ({inquiry['source']})" if created else f"פנייה נוספת מאותו לקוח ({inquiry['source']})",
-            f"סיווג: {verdict['category']} | דחיפות: {verdict['urgency']} | ביטחון: {verdict['confidence']}",
-        ]
-        if rep:
-            note_lines.append(f"שויך לנציג: {rep}")
-        if needs_review:
-            note_lines.append("*** דורש בדיקת אדם - המערכת לא בטוחה בסיווג ***")
-        if verdict.get("summary"):
-            note_lines.append(f"תקציר: {verdict['summary']}")
-        note_lines.append("---")
-        note_lines.append(inquiry["text"])
-        await add_note(contact_id, "\n".join(note_lines))
-        return {"ok": True, "contact_id": contact_id, "created": created, "rep": rep}
+        return await _write_once(inquiry, verdict, needs_review)
     except Exception as e:  # noqa: BLE001 - fail open: park it, never drop it
         log.warning("CRM write failed, queued for retry: %s", e)
         enqueue(inquiry, verdict, needs_review, str(e))
@@ -435,19 +562,7 @@ async def retry_one(row: dict) -> None:
     inquiry = json.loads(row["inquiry"])
     verdict = json.loads(row["verdict"])
     try:
-        contact_id = await find_contact(inquiry.get("phone"), inquiry.get("email"))
-        rep = None
-        if not contact_id:
-            if not _rep_property_ready["ok"]:
-                await ensure_rep_property()
-            rep = reps.next_rep()
-            contact_id = await create_contact(
-                inquiry.get("phone"), inquiry.get("email"),
-                verdict.get("name"), bool(row["needs_review"]), rep,
-            )
-        rep_line = f"שויך לנציג: {rep}\n" if rep else ""
-        await add_note(contact_id,
-                       f"(נכתב באיחור אחרי תקלת CRM)\n{rep_line}{inquiry['text']}")
+        await _write_once(inquiry, verdict, bool(row["needs_review"]), delayed=True)
         _mark_done(row["id"])
         log.info("retry succeeded for queued inquiry #%d", row["id"])
     except Exception as e:  # noqa: BLE001

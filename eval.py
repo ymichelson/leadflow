@@ -12,12 +12,14 @@ we get wrong are the cases we already flagged as low confidence. That is the
 difference between a system that is wrong and a system that is wrong quietly.
 
 Run:
-    python eval.py             # real Claude calls, needs ANTHROPIC_API_KEY
+    python eval.py             # real calls to the provider configured in .env
     python eval.py --dry-run   # offline, fake classifier, proves the harness
 """
 
 import argparse
+import os
 import sys
+import time
 
 import config  # noqa: F401  loads .env before anything reads the API key
 from classify import classify_inquiry
@@ -170,6 +172,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Evaluate the LeadFlow classifier.")
     parser.add_argument("--dry-run", action="store_true",
                         help="use a fake offline classifier (no API key, no cost)")
+    parser.add_argument("--delay", type=float, default=0,
+                        help="seconds between real calls (use 13 for Gemini free tier)")
     args = parser.parse_args()
 
     classifier = _fake_classify if args.dry_run else classify_inquiry
@@ -180,7 +184,8 @@ def main() -> int:
         print("  DRY RUN - fake classifier. These numbers measure NOTHING about the AI.")
         print("  They only prove the harness runs. Drop --dry-run for real results.")
         print("=" * 78)
-    print(f"LeadFlow classifier eval | {len(CASES)} cases | "
+    provider = "fake" if args.dry_run else os.environ.get("AI_PROVIDER", "anthropic")
+    print(f"LeadFlow classifier eval | provider = {provider} | {len(CASES)} cases | "
           f"confidence threshold = {CONFIDENCE_THRESHOLD}")
     print()
 
@@ -190,6 +195,8 @@ def main() -> int:
 
     rows, errors = [], []
     for i, case in enumerate(CASES, 1):
+        if i > 1 and not args.dry_run and args.delay > 0:
+            time.sleep(args.delay)
         verdict = classifier(case["text"])
         actual = verdict.get("category", "?")
         conf = verdict.get("confidence", 0)
@@ -215,7 +222,8 @@ def main() -> int:
         print("!! EVERY call failed - the classifier never ran. This is not a 0% score,")
         print("!! it is a broken run. First error:")
         print(f"!!   {errors[0][1]}")
-        print("!! Check ANTHROPIC_API_KEY, or use --dry-run to test the harness offline.")
+        provider = os.environ.get("AI_PROVIDER", "anthropic").strip().lower()
+        print(f"!! Check the {provider} API key, or use --dry-run to test the harness offline.")
         print()
         return 2
 

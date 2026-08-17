@@ -24,7 +24,9 @@ recent_events: list[dict] = []
 
 
 async def handle_inquiry(source: str, text: str, phone: str | None = None,
-                         email: str | None = None) -> dict:
+                         email: str | None = None,
+                         name: str | None = None,
+                         submission_id: str | None = None) -> dict:
     last_intake_at["ts"] = datetime.now(UTC)
 
     inquiry = {
@@ -32,6 +34,11 @@ async def handle_inquiry(source: str, text: str, phone: str | None = None,
         "text": clean_text(text),
         "phone": normalize_phone(phone),
         "email": (email or "").strip().lower() or None,
+        # A form field is more trustworthy than asking the model to re-extract
+        # the same name from free text. WhatsApp has no explicit name here, so
+        # its value remains None and the classifier may still extract one.
+        "name": clean_text(name, limit=200) or None,
+        "submission_id": submission_id,
     }
 
     verdict = classify_inquiry(inquiry["text"])
@@ -50,6 +57,7 @@ async def handle_inquiry(source: str, text: str, phone: str | None = None,
         "needs_review": needs_review,
         "crm": "נכתב ל-CRM" if result.get("ok") else "בתור לניסיון חוזר",
         "created": result.get("created", False),
+        "submission_id": submission_id,
     }
     recent_events.insert(0, event)
     del recent_events[30:]
