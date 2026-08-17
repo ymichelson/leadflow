@@ -695,7 +695,7 @@ async function refresh() {
       'בדמו, contact שנשאר NEW אחרי ' + d.sla_hours +
       ' שעות עבודה מסומן לבדיקה. זהו proxy לתגובה, לא אירוע מענה אמיתי.';
 
-    paint('byrep', [d.sla_breaches, d.sla_hours], () => repsHtml(d));
+    paint('byrep', [d.sla_check, d.sla_breaches, d.sla_hours], () => repsHtml(d));
     paint('repsline', [d.reps, d.rotation_next, d.business_hours, d.sla_hours],
       () => metaHtml(d));
     paint('events', d.events, () => eventsHtml(d));
