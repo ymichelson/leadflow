@@ -315,8 +315,8 @@ def test_delayed_note_preserves_the_original_decision():
     verdict = {"category": "new_lead", "urgency": "high",
                "confidence": 86, "summary": "בקשת הצעה"}
     note = crm._build_note(inquiry, verdict, True, True, "מאיה", delayed=True)
-    for expected in ("תקלת CRM", "new_lead", "high", "86", "בקשת הצעה",
-                     "דורש בדיקת אדם", "אשמח להצעה"):
+    for expected in ("תקלת CRM", "ליד חדש", "גבוהה", "86%", "בקשת הצעה",
+                     "נדרשת בדיקה אנושית", "אשמח להצעה"):
         assert expected in note
 
 

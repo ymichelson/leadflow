@@ -1,14 +1,4 @@
-"""Background controllers.
-
-1. SLA check: every 15 minutes, ask the CRM one question - which open leads
-   crossed the response window with nobody touching them. This is why the
-   service runs on an always-on server: nobody calls this code, it wakes up
-   on its own.
-
-2. Silence alert: the deadliest intake failure is not a loud error but a
-   webhook that died quietly. If nothing came in for N working hours,
-   something is probably broken upstream.
-"""
+"""Background checks for overdue leads and unexpected intake silence."""
 
 import asyncio
 import logging

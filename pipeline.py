@@ -52,7 +52,7 @@ async def handle_inquiry(source: str, text: str, phone: str | None = None,
     result = await write_lead(inquiry, verdict, needs_review)
 
     event = {
-        "at": datetime.now(UTC).strftime("%H:%M:%S"),
+        "at": datetime.now(UTC).isoformat(),
         "source": source,
         "category": verdict["category"],
         "urgency": verdict["urgency"],

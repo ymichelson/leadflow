@@ -1,17 +1,7 @@
-"""The response clock only runs when the office is open.
+"""Calculate elapsed business hours using configurable Israeli defaults.
 
-Why this file exists: the plan said "first response within 4 WORKING hours"
-and the code measured 4 wall-clock hours. Those are the same number on a
-Tuesday morning and wildly different on a Thursday evening. A lead that comes
-in Thursday at 17:00 would show up Sunday morning as 64 hours overdue, and the
-rep it names did nothing wrong - it was Shabbat.
-
-The first report the owner ever sees has to be defensible, or the whole tool
-becomes an argument instead of a management aid. So the SLA clock pauses
-outside working hours and over the weekend.
-
-Israeli defaults: Sunday to Thursday, 09:00-18:00, Asia/Jerusalem (which also
-handles the DST switch - a hardcoded UTC+3 is wrong for half the year).
+The default schedule is Sunday-Thursday, 09:00-18:00 in Asia/Jerusalem, so
+nights, weekends and daylight-saving changes do not count toward the SLA.
 """
 
 import logging
@@ -74,9 +64,7 @@ def is_working_time(moment: datetime) -> bool:
 def business_hours_between(start: datetime, end: datetime) -> float:
     """Working hours elapsed between two instants, ignoring nights and weekends.
 
-    Walks day by day rather than doing modular arithmetic: slower, but it reads
-    the way the rule is spoken, and the SLA loop runs once every 15 minutes so
-    the cost is irrelevant. Clearer code wins here.
+    The day-by-day calculation favors clarity; this runs only in the SLA check.
     """
     if not _CONFIG_OK:
         return max(0.0, (end - start).total_seconds() / 3600)

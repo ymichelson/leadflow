@@ -1,13 +1,7 @@
-"""Who gets the next lead.
+"""Round-robin assignment policy for new contacts.
 
-Assignment is a business rule, not a CRM detail, so it lives in its own
-module: the CRM adapter asks this file "who is next?" and writes the answer.
-
-State policy (important, and deliberate):
-the rotation position is a single integer held in memory. It is NOT a second
-copy of lead data - the CRM still owns who owns which lead. On startup the
-position is seeded from the CRM itself (see crm.seed_rotation_from_crm), so a
-restart does not reset fairness back to the first rep.
+The in-memory position is seeded from HubSpot on startup. HubSpot remains the
+source of truth for existing assignments.
 """
 
 import logging

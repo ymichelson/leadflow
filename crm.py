@@ -24,6 +24,15 @@ log = logging.getLogger("leadflow")
 BASE = "https://api.hubapi.com"
 NOTE_TO_CONTACT_ASSOCIATION = 202  # HubSpot-defined association type id
 
+CATEGORY_LABELS = {
+    "new_lead": "ליד חדש",
+    "existing_customer": "לקוח קיים",
+    "support": "תמיכה",
+    "spam": "ספאם",
+    "other": "אחר",
+}
+URGENCY_LABELS = {"high": "גבוהה", "normal": "רגילה", "low": "נמוכה"}
+
 # Custom contact properties used by the slice. They make the AI decision and
 # the review state queryable inside HubSpot instead of burying them only in a
 # note. The rep field demonstrates the assignment policy; it is not HubSpot's
@@ -284,7 +293,7 @@ def _lead_display_name(contact: dict, properties: dict) -> str:
 async def find_overdue_leads(sla_hours: float) -> list[dict]:
     """SLA check, grouped by the salesperson who owns the lead.
 
-    Deliberately conservative: we only look at hs_lead_status == NEW, i.e.
+    This check only looks at hs_lead_status == NEW, i.e.
     leads nobody moved. Any status change or logged call stops the clock.
 
     The clock counts WORKING hours (see business_hours.py), so the weekend does
@@ -336,7 +345,7 @@ async def find_overdue_leads(sla_hours: float) -> list[dict]:
         # not the kind to hide.
         rep = (p.get(REP_PROPERTY) or "").strip() or UNASSIGNED_LABEL
         by_rep.setdefault(rep, []).append({
-            # /status is intentionally PII-safe by default. The CRM remains the
+            # /status is PII-safe by default. The CRM remains the
             # place to inspect the actual contact and phone number.
             "name": _lead_display_name(c, p),
             "hours_overdue": round(age - sla_hours, 1) if age is not None else None,
@@ -475,18 +484,14 @@ def _reschedule(row_id: int, attempts: int, error: str) -> None:
 
 
 def _mark_dead(row_id: int, error: str) -> None:
-    """Out of retries. The row STAYS in the table - a human has to deal with it.
-
-    Deleting here would be the one place in this system where an inquiry
-    silently disappears, which is exactly what the design forbids.
-    """
+    """Mark an exhausted item for manual review without deleting it."""
     with _db() as conn:
         conn.execute(
             "UPDATE retry_queue SET status = 'dead', last_error = ? WHERE id = ?",
             (error, row_id),
         )
-    log.error("ALERT A HUMAN: inquiry #%d failed %d times and is parked in the "
-              "dead-letter queue: %s", row_id, MAX_ATTEMPTS, error)
+    log.error("inquiry #%d failed %d times and requires manual review: %s",
+              row_id, MAX_ATTEMPTS, error)
 
 
 def _build_note(inquiry: dict, verdict: dict, needs_review: bool,
@@ -500,18 +505,20 @@ def _build_note(inquiry: dict, verdict: dict, needs_review: bool,
     note_lines = []
     if delayed:
         note_lines.append("(נכתב באיחור אחרי תקלת CRM)")
+    category = CATEGORY_LABELS.get(verdict.get("category"), verdict.get("category", "אחר"))
+    urgency = URGENCY_LABELS.get(verdict.get("urgency"), verdict.get("urgency", "רגילה"))
     note_lines.extend([
         f"פנייה חדשה ({inquiry['source']})" if created
         else f"פנייה נוספת מאותו לקוח ({inquiry['source']})",
-        f"סיווג: {verdict['category']} | דחיפות: {verdict['urgency']} | "
-        f"ביטחון: {verdict['confidence']}",
+        f"סיווג: {category} | דחיפות: {urgency} | "
+        f"ביטחון: {verdict['confidence']}%",
     ])
     if inquiry.get("submission_id"):
         note_lines.append(f"מזהה קליטה: {inquiry['submission_id']}")
     if rep:
         note_lines.append(f"שויך לנציג: {rep}")
     if needs_review:
-        note_lines.append("*** דורש בדיקת אדם - המערכת לא בטוחה בסיווג ***")
+        note_lines.append("נדרשת בדיקה אנושית: ציון הביטחון נמוך מסף האוטומציה.")
     if verdict.get("summary"):
         note_lines.append(f"תקציר: {verdict['summary']}")
     note_lines.extend(["---", inquiry["text"]])

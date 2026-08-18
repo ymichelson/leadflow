@@ -180,10 +180,7 @@ def main() -> int:
 
     print()
     if args.dry_run:
-        print("=" * 78)
-        print("  DRY RUN - fake classifier. These numbers measure NOTHING about the AI.")
-        print("  They only prove the harness runs. Drop --dry-run for real results.")
-        print("=" * 78)
+        print("DRY RUN: using a fake classifier; this validates the harness only.\n")
     provider = "fake" if args.dry_run else os.environ.get("AI_PROVIDER", "anthropic")
     print(f"LeadFlow classifier eval | provider = {provider} | {len(CASES)} cases | "
           f"confidence threshold = {CONFIDENCE_THRESHOLD}")
@@ -232,7 +229,7 @@ def main() -> int:
     hits = [r for r in rows if r["hit"]]
     low_conf = [r for r in rows if r["low"]]
     misses = [r for r in rows if not r["hit"]]
-    # The number that actually matters: wrong AND confident. Nobody catches these.
+    # Confident mistakes bypass the human-review threshold.
     silent = [r for r in misses if not r["low"]]
 
     def pct(part, whole):
@@ -246,7 +243,7 @@ def main() -> int:
           f"  ({pct([r for r in ambig if r['hit']], ambig)})")
     print(f"  below threshold (<{CONFIDENCE_THRESHOLD})   {len(low_conf)}/{len(rows)}"
           f"  -> sent to human review")
-    print(f"  wrong AND confident    {len(silent)}   <- the only truly dangerous number")
+    print(f"  confident errors       {len(silent)}")
     if errors:
         print(f"  failed API calls       {len(errors)}  (counted as misses above)")
     print()
@@ -262,9 +259,8 @@ def main() -> int:
             print(f"      why it's here: {r['note']}")
         print()
 
-    print("How to read this: a miss that was already below the threshold is a system")
-    print("working as designed - it admitted it didn't know and asked for a human.")
-    print("A miss above the threshold is the real bug. That is the number to drive down.")
+    print("Below-threshold misses are routed to human review. Confident errors are")
+    print("the cases that require prompt, taxonomy or model changes.")
     print()
     return 0
 

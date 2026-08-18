@@ -22,8 +22,7 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
-import config  # noqa: F401  loads .env - MUST come before the imports below,
-#                             which read os.environ while they are importing
+import config  # noqa: F401  loads .env before configuration-dependent imports
 import business_hours
 import crm
 import intake
@@ -71,6 +70,7 @@ PAGE = """<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LeadFlow · צור קשר</title>
+<link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600&family=Rubik:wght@400;500&display=swap">
@@ -86,7 +86,7 @@ PAGE = """<!DOCTYPE html>
   html{-webkit-text-size-adjust:100%;overflow-x:hidden}
   body{margin:0;background:var(--paper);color:var(--ink);
     font:400 15px/1.65 var(--body);-webkit-font-smoothing:antialiased}
-  .shell{max-width:1080px;margin:0 auto;padding:0 28px 64px}
+  .shell{max-width:900px;margin:0 auto;padding:0 28px 64px}
   :focus-visible{outline:2px solid var(--ink);outline-offset:3px;border-radius:4px}
   .lat{direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums}
 
@@ -99,14 +99,12 @@ PAGE = """<!DOCTYPE html>
   .wa{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink2)}
   .wa svg{color:var(--moss)}
 
-  .hero{display:grid;grid-template-columns:1fr auto;gap:22px 40px;
-    align-items:end;padding:48px 0 34px}
+  .hero{padding:44px 0 28px}
   h1{margin:0;font-family:var(--disp);font-weight:500;
-    font-size:clamp(44px,7.6vw,80px);line-height:.96;letter-spacing:-.038em}
-  .hero p{margin:0 0 10px;max-width:36ch;color:var(--ink2);font-size:15px;line-height:1.6}
+    font-size:clamp(40px,6vw,64px);line-height:1.05;letter-spacing:-.035em}
+  .hero p{margin:18px 0 0;max-width:54ch;color:var(--ink2);font-size:16px;line-height:1.6}
 
-  .duo{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:18px}
-  .panel{background:var(--card);border-radius:30px;padding:34px}
+  .panel{background:var(--card);border-radius:22px;padding:32px}
   .fields{display:grid;grid-template-columns:1fr 1fr;gap:16px 18px}
   .full{grid-column:1/-1}
   label{display:block;font-size:13px;font-weight:600;margin-bottom:7px}
@@ -133,41 +131,9 @@ PAGE = """<!DOCTYPE html>
   .ok.review .dot{background:var(--ochre)}
   .ok.bad .dot{background:var(--clay)}
 
-  /* the one warm surface on the page */
-  .promo{position:relative;overflow:hidden;border-radius:30px;padding:34px;color:#fff;
-    display:flex;flex-direction:column;gap:26px;
-    background:
-      radial-gradient(120% 95% at 82% 6%, #d5893f 0%, rgba(213,137,63,0) 58%),
-      radial-gradient(95% 85% at 6% 96%, #7d3219 0%, rgba(125,50,25,0) 62%),
-      linear-gradient(158deg,#b4502c 0%,#8f3a1f 100%)}
-  .promo::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.10;
-    background-image:radial-gradient(#fff .8px,transparent .8px);background-size:13px 13px}
-  .promo > *{position:relative;z-index:1}
-  .pill{align-self:flex-start;font-size:12.5px;border-radius:999px;padding:5px 14px;
-    background:rgba(255,255,255,.16);color:#fff}
-  .promo-num{display:block;font-family:var(--disp);font-weight:500;
-    font-size:clamp(56px,8vw,76px);line-height:.85;letter-spacing:-.04em}
-  .promo-unit{display:block;margin-top:10px;font-size:15px;color:rgba(255,255,255,.86)}
-  .promo-note{margin:14px 0 0;font-size:13.5px;line-height:1.6;color:rgba(255,255,255,.78)}
-  .promo-foot{margin-top:auto;padding-top:22px;border-top:1px solid rgba(255,255,255,.22);
-    font-size:13.5px;line-height:1.7;color:rgba(255,255,255,.86)}
-  .promo-foot b{display:block;font-weight:600;color:#fff;font-size:13px;margin-bottom:3px}
-
-  footer{margin-top:44px;padding-top:22px;border-top:1px solid var(--rule);
-    display:flex;justify-content:space-between;align-items:center;gap:16px;
-    flex-wrap:wrap;font-size:13px;color:var(--ink3)}
-  footer a{color:var(--ink2);text-decoration:none;border-bottom:1px solid var(--rule)}
-  footer a:hover{color:var(--ink);border-color:var(--ink)}
-
-  @media (max-width:900px){
-    .duo{grid-template-columns:1fr}
-    .hero{grid-template-columns:1fr;align-items:start}
-    .hero p{margin-bottom:0}
-    .promo{min-height:280px}
-  }
   @media (max-width:600px){
     .shell{padding:0 18px 52px}
-    .panel,.promo{padding:26px 22px}
+    .panel{padding:26px 22px}
     .fields{grid-template-columns:1fr}
   }
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -185,12 +151,11 @@ PAGE = """<!DOCTYPE html>
   </div>
 
   <header class="hero">
-    <h1>נשמח<br>לשמוע מכם</h1>
+    <h1>נשמח לשמוע מכם</h1>
     <p>השאירו דרך לחזור אליכם וכמה מילים על מה שאתם צריכים. הפנייה נשמרת מיד ומועברת לטיפול מסודר.</p>
   </header>
 
-  <div class="duo">
-    <form class="panel" id="inquiry-form">
+  <form class="panel" id="inquiry-form">
       <div class="fields">
         <div><label for="name">שם מלא</label>
           <input id="name" type="text" autocomplete="name" placeholder="ישראל ישראלי"></div>
@@ -207,31 +172,10 @@ PAGE = """<!DOCTYPE html>
         <span class="arrow" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 17 7 7"/><path d="M17 7H7v10"/></svg></span>
       </button>
       <div class="ok" id="ok" role="status" aria-live="polite"></div>
-    </form>
-
-    <aside class="promo">
-      <div>
-        <span class="pill">יעד זמן למענה</span>
-        <span class="promo-num lat" id="promonum">4</span>
-        <span class="promo-unit">שעות עבודה</span>
-        <p class="promo-note">זה הזמן שבתוכו אנחנו שואפים לחזור לכל פנייה. חריגות מזוהות ומוצגות בתצוגת המערכת.</p>
-      </div>
-      <div class="promo-foot">
-        <b>שעות פעילות</b>
-        <span id="promohours">ראשון–חמישי, 09:00–18:00</span>
-      </div>
-    </aside>
-  </div>
-
-  <footer>
-    <span>LeadFlow · קליטת פניות</span>
-    <a href="/ops">תצוגת מערכת (דמו) ←</a>
-  </footer>
+  </form>
 
 </div>
 <script>
-const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g,
-  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let activeSubmissionId = null;
 
 async function send() {
@@ -276,6 +220,7 @@ async function send() {
   cta.disabled = true;
   ctaText.textContent = 'שולח…';
   say('', 'שולח את הפנייה…');
+  const startedAt = Date.now();
   try {
     const r = await fetch('/api/inquiry', { method: 'POST',
       headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
@@ -285,6 +230,8 @@ async function send() {
         ? 'בדקו שמילאתם פנייה וטלפון או אימייל תקינים.'
         : 'לא הצלחנו לשמור את הפנייה כרגע. נסו שוב בעוד רגע.');
     } else {
+      const remaining = 450 - (Date.now() - startedAt);
+      if (remaining > 0) await new Promise(resolve => setTimeout(resolve, remaining));
       say('good', 'קיבלנו את הפנייה ושמרנו אותה במערכת. נחזור אליכם בהקדם, תודה!');
       textEl.value = '';
       activeSubmissionId = null;
@@ -301,36 +248,6 @@ document.getElementById('inquiry-form').addEventListener('submit', event => {
   send();
 });
 
-// /status reports working hours the way the server means them
-// ("sun,mon,tue,wed,thu 09:00-18:00 Asia/Jerusalem"). That is the right form
-// for the ops view, and the wrong form for a customer. Same data, read out in
-// Hebrew here - and if it ever stops matching that shape, show it verbatim
-// rather than guess.
-const DAYS = {sun:'ראשון', mon:'שני', tue:'שלישי', wed:'רביעי',
-              thu:'חמישי', fri:'שישי', sat:'שבת'};
-function humanHours(raw) {
-  const verbatim = '<span class="lat">' + esc(raw) + '</span>';
-  const parts = String(raw || '').split(' ');
-  if (parts.length < 2) return verbatim;
-  const codes = parts[0].split(',');
-  const days = codes.map(d => DAYS[d]).filter(Boolean);
-  if (days.length !== codes.length) return verbatim;
-  if (!/^[0-9]{2}:[0-9]{2}-[0-9]{2}:[0-9]{2}$/.test(parts[1])) return verbatim;
-  const span = days.length === 1 ? days[0] : days[0] + '–' + days[days.length - 1];
-  // <bdi> so the two clock times keep their order inside the RTL sentence
-  return esc(span) + ', <bdi>' + esc(parts[1].replace('-', '–')) + '</bdi>';
-}
-
-// The response promise is not decoration - it is the live SLA config.
-async function loadPromise() {
-  try {
-    const r = await fetch('/status');
-    const d = await r.json();
-    document.getElementById('promonum').textContent = d.sla_hours;
-    document.getElementById('promohours').innerHTML = humanHours(d.business_hours);
-  } catch (e) {}
-}
-loadPromise();
 </script>
 </body>
 </html>"""
@@ -342,6 +259,7 @@ OPS_PAGE = """<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LeadFlow · תצוגת מערכת</title>
+<link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600&family=Rubik:wght@400;500&display=swap">
@@ -377,13 +295,11 @@ OPS_PAGE = """<!DOCTYPE html>
   .disclosure b{color:var(--ink);font-weight:600}
   .disclosure svg{flex:0 0 auto;margin-top:3px;color:var(--ink3)}
 
-  .hero{display:grid;grid-template-columns:1fr auto;gap:22px 40px;
-    align-items:end;padding:44px 0 34px}
+  .hero{padding:36px 0 28px}
   .hero > *{min-width:0}
   h1{margin:0;font-family:var(--disp);font-weight:500;
-    font-size:clamp(42px,7.4vw,80px);line-height:.96;letter-spacing:-.038em}
-  h1 .q{color:var(--clay)}
-  .hero p{margin:0 0 10px;max-width:40ch;color:var(--ink2);font-size:15px;line-height:1.6}
+    font-size:clamp(36px,5vw,54px);line-height:1.05;letter-spacing:-.032em}
+  .hero p{margin:14px 0 0;max-width:66ch;color:var(--ink2);font-size:15px;line-height:1.6}
 
   .alerts{background:var(--card);border-radius:30px;padding:2px 30px;margin-bottom:16px}
   .alerts:empty{display:none}
@@ -396,12 +312,12 @@ OPS_PAGE = """<!DOCTYPE html>
   .alert b{font-weight:600}
   .alert span{color:var(--ink2)}
 
-  .ledger{background:var(--card);border-radius:30px;padding:38px 40px 16px}
+  .ledger{background:var(--card);border-radius:22px;padding:28px 34px 12px}
   .ledger-top{display:flex;justify-content:space-between;align-items:flex-end;
-    gap:32px;padding-bottom:30px}
+    gap:32px;padding-bottom:22px}
   .lab{margin:0 0 6px;font-size:13px;color:var(--ink2)}
   .big{display:block;font-family:var(--disp);font-weight:500;
-    font-size:clamp(60px,9.5vw,96px);line-height:.86;letter-spacing:-.045em;color:var(--clay)}
+    font-size:clamp(44px,6vw,64px);line-height:.9;letter-spacing:-.04em;color:var(--clay)}
   .big.clear{color:var(--ink)}
   .ledger-note{max-width:30ch;margin:0 0 8px;font-size:13.5px;line-height:1.55;color:var(--ink2)}
 
@@ -435,11 +351,11 @@ OPS_PAGE = """<!DOCTYPE html>
   .mv{color:var(--ink2);font-size:14px;line-height:1.55;word-break:break-word}
 
   .sec-head{display:flex;align-items:end;justify-content:space-between;
-    gap:24px;padding:52px 0 22px}
+    gap:24px;padding:38px 0 18px}
   h2{margin:0;font-family:var(--disp);font-weight:500;font-size:clamp(28px,4vw,38px);
     line-height:1;letter-spacing:-.03em}
   .sec-head p{margin:0 0 4px;max-width:36ch;color:var(--ink2);font-size:14px}
-  .panel{background:var(--card);border-radius:30px;padding:14px 34px}
+  .panel{background:var(--card);border-radius:22px;padding:14px 34px}
 
   .evt{display:flex;flex-wrap:wrap;align-items:center;gap:9px 14px;
     padding:16px 0;border-top:1px solid var(--rule)}
@@ -471,8 +387,6 @@ OPS_PAGE = """<!DOCTYPE html>
   @keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 
   @media (max-width:900px){
-    .hero{grid-template-columns:1fr;align-items:start}
-    .hero p{margin-bottom:0}
     .ledger-top{flex-direction:column;align-items:flex-start;gap:18px}
     .ledger-note{margin-bottom:0;max-width:44ch}
   }
@@ -504,37 +418,40 @@ OPS_PAGE = """<!DOCTYPE html>
 
   <div class="disclosure">
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.6v.5"/></svg>
-    <div><b>העמוד הזה הוא חלון לדמו, לא מסך מוצר.</b>
-    בפועל אנשי המכירות עובדים בתוך ה‑CRM ולא נכנסים לשום מסך נוסף. בדמו המידע מוצג כאן; בגרסת היעד המנכ״ל יקבל דוח.
-    הוא קיים כאן רק כדי שאפשר יהיה לראות מה המערכת עשתה עם כל פנייה.</div>
+    <div><b>תצוגת הדגמה בלבד.</b>
+    אנשי המכירות עובדים ב‑HubSpot. העמוד הזה מציג את החלטות הזרימה כדי שיהיה אפשר לבדוק את האב‑טיפוס.</div>
   </div>
 
   <header class="hero">
-    <h1>מה קורה<br>לכל פנייה<span class="q">?</span></h1>
-    <p>פניות מהאתר נשמרות לפני העיבוד, מסווגות אוטומטית ונכתבות ל‑CRM עם המלצת שיוך לפי סבב. מתאם WhatsApp קיים בקוד, אך החיבור ל‑Meta עדיין לא אומת בסביבה חיה.</p>
+    <h1>תצוגת מערכת</h1>
+    <p>פניות מהאתר נשמרות, מסווגות ונכתבות ל‑HubSpot. תוצאות הסיווג והמסירה האחרונות מוצגות כאן ללא פרטי קשר.</p>
   </header>
 
   <div class="alerts" id="alerts"></div>
 
-  <section class="ledger" aria-labelledby="big-lab">
-    <div class="ledger-top">
-      <div>
-        <p class="lab" id="big-lab">לידים מעל יעד הזמן (מדד דמו)</p>
-        <span class="big" id="breachnum">—</span>
-      </div>
-      <p class="ledger-note" id="ledgernote"></p>
-    </div>
-    <div id="byrep"><p class="quiet">טוען…</p></div>
+  <div class="sec-head">
+    <h2>פניות אחרונות</h2>
+    <p>עד 30 אירועים מאז עליית השירות האחרונה. ההיסטוריה המלאה נמצאת ב‑HubSpot.</p>
+  </div>
+  <section class="panel">
+    <div id="events"><p class="quiet">טוען…</p></div>
   </section>
 
   <div class="meta" id="repsline"></div>
 
   <div class="sec-head">
-    <h2>מה נכנס למערכת</h2>
-    <p>כל פנייה, הסיווג שקיבלה, ציון הביטחון ומה נכתב ל‑CRM.</p>
+    <h2>בדיקת זמן תגובה</h2>
+    <p>בדיקה ניסיונית המבוססת על גיל רשומת איש הקשר והסטטוס שלה, לא על אירוע תגובה אמיתי.</p>
   </div>
-  <section class="panel">
-    <div id="events"><p class="quiet">טוען…</p></div>
+  <section class="ledger" aria-labelledby="big-lab">
+    <div class="ledger-top">
+      <div>
+        <p class="lab" id="big-lab">לידים מעל יעד הזמן (בדיקה ניסיונית)</p>
+        <span class="big" id="breachnum">—</span>
+      </div>
+      <p class="ledger-note" id="ledgernote"></p>
+    </div>
+    <div id="byrep"><p class="quiet">טוען…</p></div>
   </section>
 
   <footer>
@@ -570,7 +487,7 @@ function paint(id, data, html) {
 
 function alertsHtml(d) {
   const out = [];
-  if (!d.sla_check || d.sla_check.ok !== true) out.push(['warn', 'בדיקת SLA',
+  if (!d.sla_check || d.sla_check.ok !== true) out.push(['warn', 'בדיקת זמן תגובה',
     d.sla_check && d.sla_check.ok === false
       ? 'לא ניתן לבדוק כרגע את HubSpot; הנתון האחרון אינו מוצג כהצלחה.'
       : 'הבדיקה הראשונה מול HubSpot עדיין לא הושלמה.']);
@@ -598,10 +515,10 @@ function alertsHtml(d) {
 
 function repsHtml(d) {
   if (!d.sla_check || d.sla_check.ok !== true) return '<p class="clear-note">' +
-    'אין כרגע תוצאה אמינה לבדיקת ה‑SLA. המערכת תנסה שוב אוטומטית.</p>';
+    'אין כרגע תוצאה אמינה לבדיקת זמן התגובה. המערכת תנסה שוב אוטומטית.</p>';
   if (!d.sla_breaches.length) return '<p class="clear-note">' +
     'לא זוהו אנשי קשר בסטטוס NEW שעברו את סף ' +
-    esc(d.sla_hours) + ' שעות העבודה. זהו proxy בדמו, לא הוכחה שנשלחה תגובה.</p>';
+    esc(d.sla_hours) + ' שעות העבודה. זו בדיקה מקורבת, לא הוכחה שנשלחה תגובה.</p>';
 
   let worst = 0;
   d.sla_breaches.forEach(g => g.leads.forEach(l => {
@@ -660,7 +577,7 @@ function eventsHtml(d) {
     const queued = String(e.crm || '').indexOf('נכתב') !== 0;
     const conf = Math.max(0, Math.min(100, Number(e.confidence) || 0));
     return '<div class="evt">' +
-      '<time>' + esc(e.at) + '</time>' +
+      '<time>' + formatTime(e.at) + '</time>' +
       '<span class="src">' + esc(e.source) + '</span>' +
       '<span class="cat">' + esc(cat) + '</span>' +
       '<span class="conf' + (e.needs_review ? ' low' : '') + '">ביטחון ' +
@@ -671,6 +588,15 @@ function eventsHtml(d) {
         esc(e.crm) + '</span>' +
     '</div>';
   }).join('');
+}
+
+function formatTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return esc(value);
+  return date.toLocaleTimeString('he-IL', {
+    timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit',
+    second: '2-digit', hour12: false
+  });
 }
 
 function connection(up) {
@@ -692,8 +618,8 @@ async function refresh() {
     num.textContent = d.sla_breach_count;
     num.classList.toggle('clear', !d.sla_breach_count);
     document.getElementById('ledgernote').textContent =
-      'בדמו, contact שנשאר NEW אחרי ' + d.sla_hours +
-      ' שעות עבודה מסומן לבדיקה. זהו proxy לתגובה, לא אירוע מענה אמיתי.';
+      'בדמו, איש קשר שנשאר בסטטוס NEW אחרי ' + d.sla_hours +
+      ' שעות עבודה מסומן לבדיקה. זו הערכה בלבד, לא מדידה של תגובה אמיתית.';
 
     paint('byrep', [d.sla_check, d.sla_breaches, d.sla_hours], () => repsHtml(d));
     paint('repsline', [d.reps, d.rotation_next, d.business_hours, d.sla_hours],
@@ -711,18 +637,13 @@ refresh(); setInterval(refresh, 5000);
 
 @app.get("/", response_class=HTMLResponse)
 async def home() -> str:
-    """The customer-facing contact form. Nothing internal belongs on this page."""
+    """Return the customer-facing contact form."""
     return PAGE
 
 
 @app.get("/ops", response_class=HTMLResponse)
 async def ops() -> str:
-    """A window into the running system, for the demo only.
-
-    Deliberately a separate URL: the sales team works inside the CRM and the
-    target product sends the owner a report. This page exists so a human can
-    watch what the pipeline decided, not because the prototype sends one.
-    """
+    """Return the read-only demo view of recent pipeline activity."""
     return OPS_PAGE
 
 
@@ -770,7 +691,7 @@ async def inquiry_status(submission_id: str) -> JSONResponse:
     row = intake.get_status(submission_id)
     if row is None:
         return JSONResponse({"error": "not found"}, status_code=404)
-    # Deliberately no payload or AI result: this endpoint is unauthenticated.
+    # The unauthenticated endpoint excludes payload and AI result details.
     return JSONResponse(row)
 
 

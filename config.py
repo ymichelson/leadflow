@@ -1,13 +1,4 @@
-"""Reads .env into the environment.
-
-Why this exists: several modules read os.environ at import time (reps.py picks
-up REPS, business_hours.py picks up the working week). So the file has to be
-loaded before those imports run, which is why main.py imports this first.
-
-Deliberately hand-rolled instead of adding python-dotenv. Fifteen lines of
-standard library beats a dependency, and a take-home should not add a package
-to do something this small.
-"""
+"""Load local .env values before modules read configuration at import time."""
 
 import os
 from pathlib import Path
@@ -25,9 +16,7 @@ def load_env(filename: str = ".env") -> None:
         key, _, value = line.partition("=")
         key = key.strip()
         value = value.strip().strip('"').strip("'")
-        # A real environment variable always wins over the file, so you can
-        # override one setting for a single run without editing anything:
-        #     SLA_HOURS=1 uvicorn main:app
+        # Process environment variables take precedence over the local file.
         if key and key not in os.environ:
             os.environ[key] = value
 

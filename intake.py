@@ -5,7 +5,7 @@ worker claims saved rows and runs the existing pipeline afterwards. If the
 process dies, unfinished rows remain in SQLite and are recovered on restart.
 
 This table is a delivery ledger, not a CRM. HubSpot remains the system of
-record; the ledger exists only to prove that accepted work cannot disappear.
+record; the ledger tracks accepted work until delivery completes.
 """
 
 import asyncio

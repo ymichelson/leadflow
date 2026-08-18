@@ -1,8 +1,7 @@
-"""AI brain: classify + extract structured fields from a raw inquiry.
+"""AI classification adapters and output validation.
 
-Design rule: the AI reads, the code decides. This module never touches the
-CRM. It returns a structured verdict + a confidence score, and the pipeline
-decides what to do with it.
+This module returns a provider-independent verdict. It does not write to the
+CRM; routing remains deterministic application code.
 
 Fails open: any error here (API down, bad JSON, missing key) returns
 confidence=0, which routes the inquiry to the human review queue. An AI
