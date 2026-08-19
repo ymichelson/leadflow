@@ -45,17 +45,18 @@
 - חיפוש, יצירה, עדכון וכתיבת note ב-HubSpot אמיתי.
 - נרמול מספרי טלפון ומניעת כפילות לפי טלפון או אימייל.
 - תור עמיד לניסיונות חוזרים; פנייה שלא נכתבה אינה נמחקת.
-- 62 בדיקות אוטומטיות ו-CI בכל push.
+- 62 בדיקות אוטומטיות. GitHub מריץ את כולן מחדש בכל עדכון לקוד.
 
-בדיקת המסווג כוללת 16 פניות סינתטיות. לאחר שהוגדר כלל ברור בין `support`
-ל-`existing_customer`, ריצה אמיתית אחת מול Gemini הסתיימה ב-16/16 וללא
-טעות בטוחה. `--dry-run` משתמש במסווג מזויף ובודק רק את מנגנון המדידה. זו
-בדיקת פיתוח קטנה, לא מדידת איכות על נתוני לקוח אמיתיים.
+בדיקת המסווג כוללת 16 פניות סינתטיות. לאחר שהוגדר כלל ברור בין "תמיכה"
+לבין "לקוח קיים", ריצה אמיתית אחת מול Gemini הסתיימה ב-16/16 וללא
+טעות בטוחה. מצב הבדיקה ללא Gemini משתמש בתוצאות קבועות מראש ובודק רק את
+מנגנון המדידה. זו בדיקת פיתוח קטנה, לא מדידת איכות על נתוני לקוח אמיתיים.
 
 ### קיים כאב-טיפוס
 
-- שיוך round-robin נשמר בשדה `leadflow_assigned_rep`; הוא אינו
-  `hubspot_owner_id` אמיתי.
+- הפניות מחולקות בתור קבוע בין דנה, יוסי ומאיה. השיוך נשמר בשדה
+  `leadflow_assigned_rep`, אך הוא עדיין אינו משתמש בבעלי הרשומות האמיתיים
+  של HubSpot.
 - בדיקת זמן התגובה משתמשת באיש קשר שנשאר `NEW` כהערכה. היא אינה מודדת
   תגובה אמיתית לכל פנייה.
 - קיים webhook ל-WhatsApp עם אימות חתימה, אך הוא לא אומת מול חשבון Meta פעיל.
@@ -92,10 +93,10 @@ uvicorn main:app --reload
 
 כתובות מקומיות:
 
-- `http://localhost:8000/` — טופס.
-- `http://localhost:8000/ops` — תצוגת דמו.
-- `http://localhost:8000/status` — מצב JSON.
-- `http://localhost:8000/health` — health check.
+- `http://localhost:8000/`: טופס.
+- `http://localhost:8000/ops`: תצוגת דמו.
+- `http://localhost:8000/status`: מצב JSON.
+- `http://localhost:8000/health`: בדיקה שהשירות פעיל.
 
 בדיקות:
 
@@ -104,7 +105,8 @@ pytest -q
 python eval.py --dry-run
 ```
 
-`--dry-run` בודק את מנגנון המדידה עם classifier מזויף. ריצת מודל אמיתית:
+`--dry-run` אינו פונה ל-Gemini. הוא משתמש בתוצאות קבועות מראש כדי לבדוק
+שהניקוד, סף הביטחון והדוח עובדים. כדי לבדוק את Gemini עצמו מריצים:
 
 ```bash
 python eval.py --delay 13
@@ -124,24 +126,24 @@ python eval.py --delay 13
 | `SLA_HOURS` | יעד זמן התגובה בשעות עבודה (השם הטכני של ההגדרה) |
 | `APP_SECRET` | חובה להפעלת webhook של WhatsApp |
 
-Scopes נדרשים ב-HubSpot:
+הרשאות נדרשות ב-HubSpot:
 
-- `crm.objects.contacts.read`
-- `crm.objects.contacts.write`
-- `crm.schemas.contacts.write`
-- `crm.objects.notes.write`
+- `crm.objects.contacts.read`: חיפוש איש קשר קיים כדי למנוע כפילות.
+- `crm.objects.contacts.write`: יצירה ועדכון של אנשי קשר.
+- `crm.schemas.contacts.write`: יצירת השדות המיוחדים של LeadFlow.
+- `crm.objects.notes.write`: הוספת כל פנייה כפתק לאיש הקשר.
 
 אין להעלות את `.env` ל-Git או לשתף את ה-private app token.
 
 ## מבנה הפרויקט
 
-- `main.py` — FastAPI, הטופס, `/ops`, `/status` וקבלת הודעות WhatsApp.
-- `intake.py` — שמירת פניות, מניעת עיבוד כפול ותהליך רקע.
-- `pipeline.py` — נרמול, סיווג והעברה ל-CRM.
-- `classify.py` — חיבור ל-Gemini ול-Claude ובדיקת הפלט שלהם.
-- `crm.py` — HubSpot, מניעת כפילויות, notes וניסיונות חוזרים.
-- `business_hours.py`, `sla.py` — חישוב שעות עבודה ובדיקת זמן תגובה ניסיונית.
-- `eval.py` — ערכת בדיקה למסווג.
-- `test_leadflow.py` — בדיקות אוטומטיות.
+- `main.py`: FastAPI, הטופס, `/ops`, `/status` וקבלת הודעות WhatsApp.
+- `intake.py`: שמירת פניות, מניעת עיבוד כפול ותהליך רקע.
+- `pipeline.py`: נרמול, סיווג והעברה ל-CRM.
+- `classify.py`: חיבור ל-Gemini ול-Claude ובדיקת הפלט שלהם.
+- `crm.py`: HubSpot, מניעת כפילויות, notes וניסיונות חוזרים.
+- `business_hours.py`, `sla.py`: חישוב שעות עבודה ובדיקת זמן תגובה ניסיונית.
+- `eval.py`: ערכת בדיקה למסווג.
+- `test_leadflow.py`: בדיקות אוטומטיות.
 
 תשובות שלב ג' נמצאות ב-[STAGE_C.md](STAGE_C.md).
